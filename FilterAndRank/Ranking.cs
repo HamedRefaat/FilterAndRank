@@ -15,24 +15,19 @@ namespace FilterAndRank
         {
             // TODO: write your solution here.  Do not change the method signature in any way, or validation of your solution will fail.
 
-            var filterdCountryRankPeople = rankingData
+            var filterdPeopelRanking = rankingData
                 .Filter(PeopelWithoutRanking(people, rankingData))
                 .Filter(PeopleNotInCountryFilter(rankingData, countryFilter))
-                .Filter(OutOfRankPeople(rankingData, minRank, maxRank));
+                .Filter(OutOfRankPeople(rankingData, minRank, maxRank))
+                .ApplyCustomFilter(people, countryFilter);
 
-            var sortedPeopleNameCaseInSensetive = people.Where(p => filterdCountryRankPeople.Select(i => i.PersonId).Contains(p.Id)).Select(p => p.Name).ToList();
-            sortedPeopleNameCaseInSensetive.Sort(StringComparer.InvariantCultureIgnoreCase);
+           
 
-            var orderdPeopleRanking = filterdCountryRankPeople
-                .OrderBy(i => i.Rank)
-                .ThenBy(i => CountryAsSortedInCountryFilter(countryFilter, i))
-                .ThenBy(i => PeopleSortedByNameCaseInsensetive(people,i,sortedPeopleNameCaseInSensetive));
-
-            var orderdPeopleRankingLimit = orderdPeopleRanking.Skip(0).Take(maxCount);
+            var orderdPeopleRankingLimit = filterdPeopelRanking.Skip(0).Take(maxCount);
 
             int lastRank = orderdPeopleRankingLimit.Select(cr => cr.Rank).LastOrDefault();
 
-            var exceedLimitPeopleRanking = orderdPeopleRanking.Skip(maxCount);
+            var exceedLimitPeopleRanking = filterdPeopelRanking.Skip(maxCount);
 
             var peopleWithTheSameRank = exceedLimitPeopleRanking.Where(cRank => cRank.Rank == lastRank)
                .Select(p => new RankedResult(p.PersonId, p.Rank))
@@ -96,6 +91,17 @@ namespace FilterAndRank
         private static IList<CountryRanking> Filter(this IList<CountryRanking> peopleCountryRank, IEnumerable<long> peopleIds)
         {
             return peopleCountryRank.Where(i => !peopleIds.Contains(i.PersonId)).ToList();
+        }
+
+        private static IList<CountryRanking> ApplyCustomFilter(this IList<CountryRanking> filterdPeopelRanking, IList<Person> people, IList<string> countryFilter)
+        {
+            var sortedPeopleNameCaseInSensetive = people.Where(p => filterdPeopelRanking.Select(i => i.PersonId).Contains(p.Id)).Select(p => p.Name).ToList();
+            sortedPeopleNameCaseInSensetive.Sort(StringComparer.InvariantCultureIgnoreCase);
+
+            return filterdPeopelRanking
+                .OrderBy(i => i.Rank)
+                .ThenBy(i => CountryAsSortedInCountryFilter(countryFilter, i))
+                .ThenBy(i => PeopleSortedByNameCaseInsensetive(people, i, sortedPeopleNameCaseInSensetive)).ToList();
         }
     }
 }
