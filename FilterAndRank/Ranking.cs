@@ -15,52 +15,67 @@ namespace FilterAndRank
         {
             // TODO: write your solution here.  Do not change the method signature in any way, or validation of your solution will fail.
 
-            var peopleIdes = people.Select(i => i.Id);
-            var peopleIdesInRank = rankingData.Select(i => i.PersonId);
-            var peopleIdsWithoutRanking = peopleIdes.Except(peopleIdesInRank);
+            var filterdCountryRankPeople = rankingData
+                .Filter(PeopelWithoutRanking(people, rankingData))
+                .Filter(PeopleNotInCountryFilter(rankingData, countryFilter))
+                .Filter(OutOfRankPeople(rankingData, minRank, maxRank));
 
-            var IgnoredPeopleIds = new List<long>();
-            IgnoredPeopleIds.AddRange(peopleIdsWithoutRanking);
+            var sortedPeopleNameCaseInSensetive = people.Where(p => filterdCountryRankPeople.Select(i => i.PersonId).Contains(p.Id)).Select(p => p.Name).ToList();
+            sortedPeopleNameCaseInSensetive.Sort(StringComparer.InvariantCultureIgnoreCase);
 
-            var NotInCountryFilterPeopleIds = rankingData
-                .Where(rd => FilterPeopelByCountryFilter(countryFilter, rd))
-                .Select(rd => rd.PersonId);
-
-            IgnoredPeopleIds.AddRange(NotInCountryFilterPeopleIds);
-
-            var outOfRankPeople = rankingData
-                .Where(rank => FilterPeopelInRank(minRank, maxRank, rank))
-                .Select(i => i.PersonId);
-
-            IgnoredPeopleIds.AddRange(outOfRankPeople);
-
-            var remaingPeopleRanking = rankingData
-                .Where(i => !IgnoredPeopleIds.Contains(i.PersonId));
-
-            var sortedFilterdPeopelPeople = people.Where(p => !IgnoredPeopleIds.Contains(p.Id)).Select(p => p.Name).ToList();
-            sortedFilterdPeopelPeople.Sort(StringComparer.InvariantCultureIgnoreCase);
-
-            var orderdPeopleRanking = remaingPeopleRanking
+            var orderdPeopleRanking = filterdCountryRankPeople
                 .OrderBy(i => i.Rank)
-                .ThenBy(i => countryFilter.IndexOf(i.Country.ToLower()))
-                .ThenBy(i => sortedFilterdPeopelPeople.IndexOf(people.FirstOrDefault(p => p.Id == i.PersonId).Name));
+                .ThenBy(i => CountryAsSortedInCountryFilter(countryFilter, i))
+                .ThenBy(i => PeopleSortedByNameCaseInsensetive(people,i,sortedPeopleNameCaseInSensetive));
 
-            var orderdMaxPeopleRanking = orderdPeopleRanking.Skip(0).Take(maxCount);
+            var orderdPeopleRankingLimit = orderdPeopleRanking.Skip(0).Take(maxCount);
 
-            int lastRank = orderdMaxPeopleRanking.Select(pR => pR.Rank).LastOrDefault();
+            int lastRank = orderdPeopleRankingLimit.Select(cr => cr.Rank).LastOrDefault();
 
-            var afterMaxCountPeople = orderdPeopleRanking.Skip(maxCount);
+            var exceedLimitPeopleRanking = orderdPeopleRanking.Skip(maxCount);
 
-            var peopleWithTheSameRank = afterMaxCountPeople.Where(cRank => cRank.Rank == lastRank)
+            var peopleWithTheSameRank = exceedLimitPeopleRanking.Where(cRank => cRank.Rank == lastRank)
                .Select(p => new RankedResult(p.PersonId, p.Rank))
                .ToList();
 
-            var filterdPeople = orderdMaxPeopleRanking
+            var filterByCountryWithRankPeople = orderdPeopleRankingLimit
                 .Select(p => new RankedResult(p.PersonId, p.Rank))
                 .ToList();
-            filterdPeople.AddRange(peopleWithTheSameRank);
+            filterByCountryWithRankPeople.AddRange(peopleWithTheSameRank);
 
-            return filterdPeople;
+            return filterByCountryWithRankPeople;
+        }
+
+        private static int PeopleSortedByNameCaseInsensetive(IList<Person> people, CountryRanking countryRanking, List<string> sortedFilterdPeopelPeople)
+        {
+            return sortedFilterdPeopelPeople.IndexOf(people.FirstOrDefault(p => p.Id == countryRanking.PersonId).Name);
+        }
+
+        private static int CountryAsSortedInCountryFilter(IList<string> countryFilter, CountryRanking i)
+        {
+            return countryFilter.IndexOf(i.Country.ToLower());
+        }
+
+        private static IEnumerable<long> OutOfRankPeople(IList<CountryRanking> rankingData, int minRank, int maxRank)
+        {
+            return rankingData
+                            .Where(rank => FilterPeopelInRank(minRank, maxRank, rank))
+                            .Select(i => i.PersonId);
+        }
+
+        private static IEnumerable<long> PeopleNotInCountryFilter(IList<CountryRanking> rankingData, IList<string> countryFilter)
+        {
+            return rankingData
+                            .Where(rd => FilterPeopelByCountryFilter(countryFilter, rd))
+                            .Select(rd => rd.PersonId);
+        }
+
+        private static IEnumerable<long> PeopelWithoutRanking(IList<Person> people, IList<CountryRanking> rankingData)
+        {
+            var peopleIdes = people.Select(i => i.Id);
+            var peopleIdesInRank = rankingData.Select(i => i.PersonId);
+            var peopleIdsWithoutRanking = peopleIdes.Except(peopleIdesInRank);
+            return peopleIdsWithoutRanking;
         }
 
         private static bool FilterPeopelInRank(int minRank, int maxRank, CountryRanking rank)
@@ -70,7 +85,17 @@ namespace FilterAndRank
 
         private static bool FilterPeopelByCountryFilter(IList<string> countryFilter, CountryRanking countryRanking)
         {
-            return !countryFilter.Select(filter => filter.ToLower()).Contains(countryRanking.Country.ToLower());
+            return !countryFilter.ToLower().Contains(countryRanking.Country.ToLower());
+        }
+
+        private static IList<string> ToLower(this IList<string> countryFilter)
+        {
+            return countryFilter.Select(filter => filter.ToLower()).ToList();
+        }
+
+        private static IList<CountryRanking> Filter(this IList<CountryRanking> peopleCountryRank, IEnumerable<long> peopleIds)
+        {
+            return peopleCountryRank.Where(i => !peopleIds.Contains(i.PersonId)).ToList();
         }
     }
 }
